@@ -13,39 +13,58 @@ import validators
 scraper = Blueprint('scraper', __name__)
 
 
+
 @scraper.route('/', methods=['GET'])
 def hello_world():
+
     return 'This is my first API call!'
+
 
 
 @scraper.route('/parser', methods=['POST'])
 def home():
-    # global url
-    # url = "https://en.wikipedia.org/wiki/Web_scraping"
+
     try:
-        url = request.json["url"]
+        url = request.json["url"]   #accept "url": as request body
         domain = "wikipedia.org"
-        if domain in url:
+        if domain in url:           #Check that URL belongs to wikipedia.org domain
             print(url)
+            # Execute scrapping, parsing and commit it to the database
             return jsonify({
-                "result": parser(scrapeWikiArticle(url), url)
+                "result": commit(parser(scrapeWikiArticle(url), url), url)
             })
+
         else:
             return jsonify("Only wikipedia links are allowed!")
+
     except KeyError:
         return jsonify("To parse a text send <<url>>: <<http://yoururl.com>> in the body of the request")
 
 
-def parser(x, url):
-    split_list = x.split(" ")
+def scrapeWikiArticle(url):
+
+    response = requests.get(url=url,)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    # title = soup.find(id="firstHeading")
+    article = soup.find('div', attrs={'class': 'mw-parser-output'}).text
+    return article
+
+
+def parser(article, url):
+
+    split_list = article.split(" ")
     words = pd.value_counts(np.array(split_list))
     words = list(zip(words.index, words))
-    words = words
     json_result = words
+    return json_result
+
+
+def commit(json_result, url):
+
     if db.session.query(tablerinho.json_id).filter_by(json_urlerinho=url).first() is None:
         new_json = tablerinho(
-            json_objecterinho=json_result,
-            json_urlerinho=url
+            json_objecterinho = json_result,
+            json_urlerinho = url
         )
         db.session.add(new_json)
         db.session.commit()
@@ -53,38 +72,20 @@ def parser(x, url):
     return "Scrapping ok, parsing saved under ID:" + str(query_response[0])
 
 
-def scrapeWikiArticle(url):
-    response = requests.get(
-        url=url,
-    )
-
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    title = soup.find(id="firstHeading")
-    # print(title.text)
-    p1 = soup.find('div', attrs={'class': 'mw-parser-output'}).text
-    # print(type(p1))
-    return p1
-
 
 @scraper.route('/list', methods=['GET'])
 def get_url_from_db():
+
     query_result = tablerinho.query.with_entities(tablerinho.json_id, tablerinho.json_urlerinho,
                                                   tablerinho.json_annoterinho).distinct()
     url_list = [{"id": row.json_id, "url": row.json_urlerinho, "tag": row.json_annoterinho} for row in query_result]
-    # print(url_list)
-    # url_list = tuple(zip(url_list))
-    # print(url_list)
-    # id_query = tablerino.query.with_entities(tablerino.json_id).distinct()
-    # id_list = [id[0] for id in id_query]
-    # response = [url_list] + [id_list]
-    # json_result = json.dumps(response, ensure_ascii=False)
-    # print(json_result)
     return jsonify(url_list)
+
 
 
 @scraper.route('/tag', methods=['PATCH'])
 def text_tagger():
+
     text_id = request.json["text_id"]
     tag = request.json["tag"]
     x = db.session.query(tablerinho).get(text_id)
@@ -93,8 +94,10 @@ def text_tagger():
     return "tag properly added to text n°" + str(text_id)
 
 
+
 @scraper.route('/search', methods=['POST'])
 def search():
+
     s_words = request.json["word"]
     text_query_r = tablerinho.query.with_entities(
         tablerinho.json_objecterinho,
@@ -116,6 +119,7 @@ def search():
                 result_list.append({"text Id": row.json_id, "url": row.json_urlerinho, "with occurrences": word[1]})
     response = "Found <<" + s_words + ">> in: " + str(result_list)
     return jsonify(response)
+
 
 
 @scraper.route('/delete', methods=['DELETE'])
